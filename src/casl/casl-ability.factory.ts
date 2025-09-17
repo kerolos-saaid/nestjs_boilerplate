@@ -1,12 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import {
+  PureAbility,
   AbilityBuilder,
-  createPrismaAbility,
-  PrismaQuery,
-  AbilityClass,
-  ExtractSubjectType,
-  InferSubjects,
-} from '@casl/prisma';
+  subject as an,
+} from '@casl/ability';
+import { createPrismaAbility, PrismaQuery, Subjects } from '@casl/prisma';
 import { User, Post } from '@prisma/client';
 
 // Define the actions users can perform
@@ -19,12 +17,13 @@ export enum Action {
 }
 
 // Define the subjects (entities) that can have permissions
-// We use InferSubjects to automatically infer the subject types from our Prisma models
-// and explicitly add 'all' for global permissions.
-type Subjects = InferSubjects<typeof User | typeof Post> | 'all';
+type AppSubjects = Subjects<{
+  User: User;
+  Post: Post;
+}>;
 
 // Define the Ability type for our application, including Prisma-specific extensions
-export type AppAbility = AbilityClass<[Action, Subjects], PrismaQuery>;
+export type AppAbility = PureAbility<[Action, AppSubjects | 'all'], PrismaQuery>;
 
 @Injectable()
 export class CaslAbilityFactory {
@@ -57,10 +56,6 @@ export class CaslAbilityFactory {
     }
 
     // Build and return the final ability object
-    return build({
-      // This function is used to detect the subject type for a given object
-      detectSubjectType: (item) =>
-        item.constructor as ExtractSubjectType<Subjects>,
-    });
+    return build();
   }
 }

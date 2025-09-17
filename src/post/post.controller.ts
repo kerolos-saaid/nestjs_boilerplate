@@ -19,25 +19,10 @@ import { PoliciesGuard } from '../auth/guards/policies.guard';
 import { CheckPolicies } from '../auth/decorators/check-policies.decorator';
 import { Action, CaslAbilityFactory } from '../casl/casl-ability.factory';
 import { subject } from '@casl/ability';
-import { User } from '@prisma/client';
-
-// This is a temporary solution to simulate an authenticated user.
-// In a real application, an authentication guard (e.g., from Passport.js)
-// would be responsible for fetching the user and attaching it to the request.
-const attachUserToRequest = (req: any) => {
-  req.user = {
-    id: 1,
-    email: 'test@example.com',
-    name: 'Test User',
-    password: 'hashedpassword',
-    role: 'USER',
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  } as User;
-};
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('posts')
-@UseGuards(PoliciesGuard)
+@UseGuards(JwtAuthGuard, PoliciesGuard)
 export class PostController {
   constructor(
     private readonly postService: PostService,
@@ -47,7 +32,6 @@ export class PostController {
   @Post()
   @CheckPolicies((ability) => ability.can(Action.Create, 'Post'))
   create(@Body() createPostDto: CreatePostDto, @Req() req: any) {
-    attachUserToRequest(req); // Simulate user authentication
     const user = req.user;
     return this.postService.create({
       ...createPostDto,
@@ -65,7 +49,6 @@ export class PostController {
 
   @Get(':id')
   async findOne(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
-    attachUserToRequest(req); // Simulate user authentication
     const user = req.user;
     const ability = this.caslAbilityFactory.createForUser(user);
 
@@ -87,7 +70,6 @@ export class PostController {
     @Body() updatePostDto: UpdatePostDto,
     @Req() req: any,
   ) {
-    attachUserToRequest(req); // Simulate user authentication
     const user = req.user;
     const ability = this.caslAbilityFactory.createForUser(user);
 
@@ -108,7 +90,6 @@ export class PostController {
 
   @Delete(':id')
   async remove(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
-    attachUserToRequest(req); // Simulate user authentication
     const user = req.user;
     const ability = this.caslAbilityFactory.createForUser(user);
 

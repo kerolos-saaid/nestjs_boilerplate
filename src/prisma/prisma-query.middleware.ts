@@ -5,9 +5,7 @@ import { Action } from '../casl/casl-ability.factory';
 
 // This function is a factory that creates the Prisma middleware.
 // It takes the RequestStorageService as a dependency.
-export function createPrismaQueryMiddleware(
-  storage: RequestStorageService,
-): Prisma.Middleware {
+export function createPrismaQueryMiddleware(storage: RequestStorageService) {
   return async (params, next) => {
     const ability = storage.getAbility();
 

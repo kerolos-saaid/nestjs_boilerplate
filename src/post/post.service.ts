@@ -7,17 +7,17 @@ export class PostService {
   constructor(private prisma: PrismaService) {}
 
   async create(data: Prisma.PostCreateInput): Promise<Post> {
-    return this.prisma.post.create({ data });
+    return this.prisma.client.post.create({ data });
   }
 
   async findAll(): Promise<Post[]> {
-    return this.prisma.post.findMany();
+    return this.prisma.client.post.findMany();
   }
 
   async findOne(
     postWhereUniqueInput: Prisma.PostWhereUniqueInput,
   ): Promise<Post | null> {
-    return this.prisma.post.findUnique({ where: postWhereUniqueInput });
+    return this.prisma.client.post.findUnique({ where: postWhereUniqueInput });
   }
 
   async update(params: {
@@ -25,10 +25,10 @@ export class PostService {
     data: Prisma.PostUpdateInput;
   }): Promise<Post> {
     const { where, data } = params;
-    return this.prisma.post.update({ where, data });
+    return this.prisma.client.post.update({ where, data });
   }
 
   async remove(where: Prisma.PostWhereUniqueInput): Promise<Post> {
-    return this.prisma.post.delete({ where });
+    return this.prisma.client.post.delete({ where });
   }
 }

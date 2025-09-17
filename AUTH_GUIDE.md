@@ -106,14 +106,14 @@ One of the most powerful features of this boilerplate is the **automatic filteri
 
 ### How it Works
 
-A custom **Prisma Middleware** (`src/prisma/prisma-query.middleware.ts`) intercepts every query sent by the `PrismaClient`.
+A custom **Prisma Middleware** (`src/prisma/prisma-query.middleware.ts`) is applied to the `PrismaClient` instance within the `PrismaService`.
 
 1.  An `AuthMiddleware` runs on every request, determines the user's abilities, and stores them in a request-scoped context using `AsyncLocalStorage`.
-2.  The Prisma Middleware retrieves the abilities for the current request.
-3.  It uses CASL's `accessibleBy` function to generate a Prisma `WHERE` clause based on the user's `read` permissions.
+2.  The `PrismaService` constructor retrieves the user's abilities for the current request and applies the middleware to the `PrismaClient` instance.
+3.  The middleware uses CASL's `accessibleBy` function to generate a Prisma `WHERE` clause based on the user's `read` permissions.
 4.  This `WHERE` clause is automatically appended to any `find`, `update`, or `delete` query, ensuring users can only see or modify records they have access to.
 
-This means your `postService.findAll()` method is automatically secure without any extra code.
+This means your `postService.findAll()` method is automatically secure without any extra code. Any service that uses `PrismaService` will need to access the Prisma client via the `client` property (e.g., `this.prisma.client.post.findMany()`).
 
 ---
 

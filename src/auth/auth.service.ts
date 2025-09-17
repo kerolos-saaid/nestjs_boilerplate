@@ -14,7 +14,7 @@ export class AuthService {
 
   async signup(signupDto: SignupDto) {
     const hashedPassword = await bcrypt.hash(signupDto.password, 10);
-    const user = await this.prisma.user.create({
+    const user = await this.prisma.client.user.create({
       data: {
         ...signupDto,
         password: hashedPassword,
@@ -26,7 +26,7 @@ export class AuthService {
   }
 
   async validateUser(signinDto: SigninDto) {
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prisma.client.user.findUnique({
       where: { email: signinDto.email },
     });
 
@@ -47,7 +47,7 @@ export class AuthService {
 
   async validateOAuthLogin(email: string, provider: string): Promise<any> {
     try {
-      const user = await this.prisma.user.findFirst({
+      const user = await this.prisma.client.user.findFirst({
         where: { email },
       });
 
@@ -55,7 +55,7 @@ export class AuthService {
         return user;
       }
 
-      const newUser = await this.prisma.user.create({
+      const newUser = await this.prisma.client.user.create({
         data: {
           email,
           name: email.split('@')[0],

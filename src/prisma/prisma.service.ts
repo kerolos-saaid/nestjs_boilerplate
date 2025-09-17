@@ -1,23 +1,19 @@
-import { Injectable, OnModuleInit, INestApplication } from '@nestjs/common';
+import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
-import { RequestStorageService } from '../request-storage/request-storage.service';
-import { createPrismaQueryMiddleware } from './prisma-query.middleware';
 
 @Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit {
-  constructor(private readonly storage: RequestStorageService) {
-    super();
+export class PrismaService implements OnModuleInit, OnModuleDestroy {
+  public client: PrismaClient;
+
+  constructor() {
+    this.client = new PrismaClient();
   }
 
   async onModuleInit() {
-    // @ts-ignore - $use is not available on the type, but it exists on the instance
-    this.$use(createPrismaQueryMiddleware(this.storage));
-    await this.$connect();
+    await this.client.$connect();
   }
 
-  async enableShutdownHooks(app: INestApplication) {
-    process.on('beforeExit', async () => {
-      await app.close();
-    });
+  async onModuleDestroy() {
+    await this.client.$disconnect();
   }
 }

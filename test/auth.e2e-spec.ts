@@ -21,7 +21,7 @@ describe('AuthController (e2e)', () => {
   });
 
   afterAll(async () => {
-    await prisma.user.deleteMany();
+    await prisma.client.user.deleteMany();
     await app.close();
   });
 

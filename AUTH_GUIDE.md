@@ -27,18 +27,21 @@ The `createForUser` method receives a `user` object and builds an `AppAbility` o
 
 // An ADMIN can do anything
 if (user && user.role === 'ADMIN') {
-  can(Action.Manage, 'all'); // 'manage' is a special keyword for any action
+  can(Action.Manage, 'all');
 } else {
-  // Anyone (even unauthenticated users) can read all posts
-  can(Action.Read, 'Post');
+  // Public, read-only access for everyone
+  can(Action.Read, 'all');
 
   if (user) {
-    // Authenticated users can create posts
+    // Authenticated users can...
+    // Create new posts
     can(Action.Create, 'Post');
 
-    // They can only manage posts they own.
-    // This condition is used for both API-level checks and data-level filtering.
+    // Manage their own posts
     can(Action.Manage, 'Post', { authorId: user.id });
+
+    // They cannot delete posts that are not theirs (example of explicit denial)
+    cannot(Action.Delete, 'Post', { authorId: { not: user.id } });
   }
 }
 ```
@@ -47,7 +50,21 @@ if (user && user.role === 'ADMIN') {
 
 ## 2. Securing Endpoints (API-Level Security)
 
-You can protect your controller endpoints using the `PoliciesGuard` and the `@CheckPolicies` decorator.
+You can protect your controller endpoints using a combination of Guards and the `@CheckPolicies` decorator. For most protected routes, you'll want to apply guards at the controller level.
+
+```typescript
+// src/post/post.controller.ts
+@Controller('posts')
+@UseGuards(JwtAuthGuard, PoliciesGuard)
+export class PostController {
+  // ...
+}
+```
+
+- **`JwtAuthGuard`**: This guard, provided by `@nestjs/passport`, ensures that the request has a valid JWT. It populates `req.user` with the user payload.
+- **`PoliciesGuard`**: This is our custom guard that works with the `CaslAbilityFactory` to check permissions.
+
+With these guards in place, you can now use the following patterns to secure individual endpoints.
 
 ### Pattern 1: Simple, Role-Based Checks
 
@@ -102,18 +119,26 @@ async update(@Param('id') id: string, @Body() updatePostDto: UpdatePostDto, @Req
 
 ## 3. Automatic Data-Level Security
 
-One of the most powerful features of this boilerplate is the **automatic filtering of database queries**. You don't need to manually add `where` clauses to your service methods to hide data a user shouldn't see.
+One of the most powerful features of this boilerplate is the **automatic filtering of database queries**. You don't need to manually add `where` clauses to your service methods to ensure a user can only access the data they are permitted to see.
 
 ### How it Works
 
-A custom **Prisma Middleware** (`src/prisma/prisma-query.middleware.ts`) is applied to the `PrismaClient` instance within the `PrismaService`.
+This is achieved through a combination of request-scoped storage and a custom Prisma middleware.
 
-1.  An `AuthMiddleware` runs on every request, determines the user's abilities, and stores them in a request-scoped context using `AsyncLocalStorage`.
-2.  The `PrismaService` constructor retrieves the user's abilities for the current request and applies the middleware to the `PrismaClient` instance.
-3.  The middleware uses CASL's `accessibleBy` function to generate a Prisma `WHERE` clause based on the user's `read` permissions.
-4.  This `WHERE` clause is automatically appended to any `find`, `update`, or `delete` query, ensuring users can only see or modify records they have access to.
+1.  **Request-Scoped Storage (`src/request-storage/request-storage.service.ts`)**
+    - This service uses Node.js's `AsyncLocalStorage` to store data that is available for the entire lifecycle of a single request.
+    - The `PoliciesGuard` (which runs on protected routes) calculates the current user's abilities using `CaslAbilityFactory`.
+    - It then stores this `AppAbility` object in the `RequestStorageService`.
 
-This means your `postService.findAll()` method is automatically secure without any extra code. Any service that uses `PrismaService` will need to access the Prisma client via the `client` property (e.g., `this.prisma.client.post.findMany()`).
+2.  **Prisma Middleware (`src/prisma/prisma-query.middleware.ts`)**
+    - The `PrismaService` is also request-scoped. When it's instantiated for a request, it retrieves the user's `AppAbility` object from the `RequestStorageService`.
+    - It then applies a custom middleware to its `PrismaClient` instance.
+    - This middleware intercepts incoming Prisma queries (like `findMany`, `findUnique`, `update`, etc.).
+    - It maps the Prisma action to a CASL `Action` (e.g., `findMany` -> `Action.Read`).
+    - It then uses CASL's `accessibleBy(ability, action)` function to generate a Prisma `WHERE` clause based on the user's permissions for that action.
+    - This `WHERE` clause is automatically merged into the original query's `where` condition using an `AND` operator.
+
+**The result:** Any query executed via `PrismaService` is automatically filtered. For example, when you call `postService.findAll()`, the Prisma middleware transparently adds a condition like `{ authorId: currentUserId }` to the `findMany` query if the user is only allowed to see their own posts. This provides robust data-level security without any extra effort in your service files.
 
 ---
 
@@ -138,13 +163,18 @@ model Comment {
 Then run `npx prisma migrate dev --name add_comment`.
 
 **2. Update CASL Subjects:**
-In `src/casl/casl-ability.factory.ts`, add your new model to the `Subjects` type.
+In `src/casl/casl-ability.factory.ts`, add your new model to the `AppSubjects` type. This makes CASL aware of the new entity.
 
 ```typescript
 // src/casl/casl-ability.factory.ts
 import { User, Post, Comment } from '@prisma/client'; // Add Comment
+import { Subjects } from '@casl/prisma';
 
-type Subjects = InferSubjects<typeof User | typeof Post | typeof Comment> | 'all'; // Add Comment
+type AppSubjects = Subjects<{
+  User: User;
+  Post: Post;
+  Comment: Comment; // Add Comment
+}>;
 ```
 
 **3. Add New Rules:**

@@ -33,8 +33,10 @@ model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
   name      String?
-  password  String
-  role      Role     @default(USER)
+  password  String?
+  googleId  String?  @unique
+  appleId   String?  @unique
+  role      String   @default("USER")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   posts     Post[]
@@ -50,11 +52,6 @@ model Post {
   author    User     @relation(fields: [authorId], references: [id])
   authorId  Int
 }
-
-enum Role {
-  USER
-  ADMIN
-}
 املأ ملف .env بالبيانات التالية. (من الجيد أيضًا إنشاء نسخة باسم .env.example بدون القيم الفعلية لوضعها على Git).# .env
 # Application Config
 NODE_ENV=development
@@ -69,15 +66,27 @@ DATABASE_URL="postgresql://admin:admin@localhost:5432/nestjs_db?schema=public" #
 # JWT Config
 JWT_SECRET=your-super-secret-key-that-is-at-least-32-characters-long
 JWT_EXPIRATION_TIME=3600s
+
+# Google OAuth
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+GOOGLE_CALLBACK_URL=http://localhost:3000/auth/google/callback
+
+# Apple OAuth
+APPLE_CLIENT_ID=your_apple_client_id
+APPLE_TEAM_ID=your_apple_team_id
+APPLE_KEY_ID=your_apple_key_id
+APPLE_PRIVATE_KEY=your_apple_private_key
+APPLE_CALLBACK_URL=http://localhost:3000/auth/apple/callback
 ملاحظة هامة: الـ DATABASE_URL هنا يستخدم localhost لتشغيل أوامر migrate من جهازك. سنحتاج إلى نسخة أخرى عند التشغيل داخل Docker لاحقًا.شغّل قاعدة البيانات وقم بأول تهجير (Migration):docker-compose up -d db
 npx prisma migrate dev --name init
-الخطوة 3: إعداد الوحدات الأساسية والأدوات المشتركةسنبني الآن الهيكل الذي سيجعل تطبيقنا قويًا ومتسقًا.ثبّت الاعتماديات اللازمة:npm install @nestjs/config joi class-validator class-transformer @nestjs/passport @nestjs/jwt passport passport-local passport-jwt bcrypt
-npm install @types/joi @types/passport-local @types/passport-jwt @types/bcrypt --save-dev
+npm install @nestjs/config joi class-validator class-transformer @nestjs/passport @nestjs/jwt passport passport-local passport-jwt bcrypt passport-google-oauth20 passport-apple
+npm install @types/joi @types/passport-local @types/passport-jwt @types/bcrypt @types/passport-google-oauth20 @types/passport-apple --save-dev
 أنشئ الهيكل العام للمجلدات:mkdir -p src/common/{filters,interceptors}
-mkdir -p src/core/auth
-mkdir -p src/providers/database
+mkdir -p src/auth
+mkdir -p src/prisma
 أنشئ أدوات عالمية لمعالجة الاستجابات والأخطاء في مجلد src/common/.(استخدم الكود الذي أنشأناه سابقًا لملفات all-exceptions.filter.ts و transform.interceptor.ts)حدّث src/main.ts لتطبيق هذه الأدوات عالميًا.حدّث src/app.module.ts لتضمين ConfigModule مع التحقق من صحة متغيرات البيئة باستخدام Joi.الخطوة 4: بناء نظام الصلاحيات المتقدم باستخدام CASLسنستبدل أنظمة الحماية التقليدية بنظام CASL الأكثر قوة ومرونة.ثبّت CASL:npm install @casl/ability
-أنشئ مجلد casl داخل src/core/auth.أنشئ "مصنع القدرات" casl-ability.factory.ts:(استخدم الكود الموجود في الملف الذي نعمل عليه src/core/auth/casl/casl-ability.factory.ts). هذا هو الملف الذي يعرّف من يمكنه فعل ماذا.أنشئ مجلد guards و decorators داخل src/core/auth.أنشئ PoliciesGuard و CheckPolicies decorator:(استخدم الكود الذي أنشأناه سابقًا لهذين الملفين). هذه هي الأدوات التي ستسمح لنا بتطبيق القواعد في الـ controllers.أنشئ CaslModule لتوفير الـ CaslAbilityFactory لبقية التطبيق.// src/core/auth/casl/casl.module.ts
+أنشئ مجلد casl داخل src/auth.أنشئ "مصنع القدرات" casl-ability.factory.ts:(استخدم الكود الموجود في الملف الذي نعمل عليه src/auth/casl/casl-ability.factory.ts). هذا هو الملف الذي يعرّف من يمكنه فعل ماذا.أنشئ مجلد guards و decorators داخل src/auth.أنشئ PoliciesGuard و CheckPolicies decorator:(استخدم الكود الذي أنشأناه سابقًا لهذين الملفين). هذه هي الأدوات التي ستسمح لنا بتطبيق القواعد في الـ controllers.أنشئ CaslModule لتوفير الـ CaslAbilityFactory لبقية التطبيق.// src/auth/casl/casl.module.ts
 import { Module } from '@nestjs/common';
 import { CaslAbilityFactory } from './casl-ability.factory';
 
@@ -86,7 +95,29 @@ import { CaslAbilityFactory } from './casl-ability.factory';
   exports: [CaslAbilityFactory],
 })
 export class CaslModule {}
-الخطوة 5: بناء وحدة المصادقة (Authentication)سنقوم ببناء وحدة Auth كاملة مع JwtStrategy و LocalStrategy.أنشئ وحدة AuthModule في src/core/auth. قم بتضمين PassportModule, JwtModule و CaslModule.أنشئ JwtStrategy للتحقق من صحة التوكنات.أنشئ AuthService الذي سيحتوي على منطق تسجيل الدخول والتحقق من كلمة المرور.أنشئ AuthController الذي سيحتوي على endpoint لتسجيل الدخول (/auth/login).الخطوة 6: Dockerize The Applicationالآن، لنجعل تطبيقنا قابلاً للنقل والنشر في أي مكان.أنشئ ملف .dockerignore:.git
+الخطوة 5: بناء وحدة المصادقة (Authentication)سنقوم ببناء وحدة Auth كاملة مع JwtStrategy و LocalStrategy.أنشئ وحدة AuthModule في src/auth. قم بتضمين PassportModule, JwtModule و CaslModule.أنشئ JwtStrategy للتحقق من صحة التوكنات.أنشئ AuthService الذي سيحتوي على منطق تسجيل الدخول والتحقق من كلمة المرور.أنشئ AuthController الذي سيحتوي على endpoint لتسجيل الدخول (/auth/login).
+
+الخطوة 5 (ب): إضافة المصادقة عبر الشبكات الاجتماعية (OAuth)
+بالإضافة إلى المصادقة التقليدية، هذا الـ boilerplate يدعم تسجيل الدخول عبر Google و Apple.
+
+1.  **تحديث `schema.prisma`**:
+    لقد قمنا بالفعل بتحديث موديل `User` في `prisma/schema.prisma` ليشمل `googleId` و `appleId` وجعلنا حقل `password` اختياريًا. هذا يسمح للمستخدمين بالتسجيل عبر OAuth بدون الحاجة إلى كلمة مرور محلية.
+
+2.  **استراتيجيات OAuth**:
+    -   `src/auth/strategies/google.strategy.ts`: هذه الاستراتيجية تتعامل مع عملية مصادقة Google.
+    -   `src/auth/strategies/apple.strategy.ts`: هذه الاستراتيجية تتعامل مع عملية مصادقة Apple.
+    كلا الاستراتيجيتين تقومان بالتحقق من المستخدم في قاعدة البيانات وإنشاء مستخدم جديد إذا لم يكن موجودًا.
+
+3.  **إضافة `end-points` جديدة**:
+    تمت إضافة `end-points` جديدة إلى `src/auth/auth.controller.ts` للتعامل مع طلبات OAuth:
+    -   `GET /auth/google`: يبدأ عملية المصادقة مع Google.
+    -   `GET /auth/google/callback`: الـ `URL` الذي يعود إليه Google بعد المصادقة.
+    -   `GET /auth/apple`: يبدأ عملية المصادقة مع Apple.
+    -   `GET /auth/apple/callback`: الـ `URL` الذي يعود إليه Apple بعد المصادقة.
+
+4.  **تكوين متغيرات البيئة**:
+    تأكد من إضافة متغيرات البيئة اللازمة لـ Google و Apple في ملف `.env` كما هو موضح في قسم `env` أعلاه. ستحتاج إلى الحصول على هذه المفاتيح من Google Cloud Console و Apple Developer account.
+الخطوة 6: Dockerize The Applicationالآن، لنجعل تطبيقنا قابلاً للنقل والنشر في أي مكان.أنشئ ملف .dockerignore:.git
 node_modules
 dist
 .env

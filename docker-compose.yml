@@ -4,6 +4,8 @@ services:
   db:
     image: postgres:15
     container_name: postgres_db_dev
+    env_file:
+      - .env
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}

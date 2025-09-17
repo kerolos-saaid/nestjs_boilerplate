@@ -2,7 +2,6 @@ import { Injectable, OnModuleInit, INestApplication } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { RequestStorageService } from '../request-storage/request-storage.service';
 import { createPrismaQueryMiddleware } from './prisma-query.middleware';
-import { PrismaClientWithMiddleware } from './prisma-client.interface';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {
@@ -11,9 +10,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   }
 
   async onModuleInit() {
-    (this as unknown as PrismaClientWithMiddleware).$use(
-      createPrismaQueryMiddleware(this.storage),
-    );
+    // @ts-ignore - $use is not available on the type, but it exists on the instance
+    this.$use(createPrismaQueryMiddleware(this.storage));
     await this.$connect();
   }
 
